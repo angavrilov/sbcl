@@ -243,6 +243,8 @@
   (fp-complex-single-immediate immediate-constant)
   (fp-complex-double-immediate immediate-constant)
 
+  (sse-pack-immediate immediate-constant)
+
   (immediate immediate-constant)
 
   ;;
@@ -262,7 +264,8 @@
   (double-stack stack)
   (complex-single-stack stack)  ; complex-single-floats
   (complex-double-stack stack :element-size 2)  ; complex-double-floats
-
+  #!+sb-sse-intrinsics
+  (sse-stack stack :element-size 2)
 
   ;;
   ;; magic SCs
@@ -374,6 +377,13 @@
                       :save-p t
                       :alternate-scs (complex-double-stack))
 
+  #!+sb-sse-intrinsics
+  (sse-reg float-registers
+           :locations #.*float-regs*
+           :constant-scs (sse-pack-immediate)
+           :save-p t
+           :alternate-scs (sse-stack))
+
   ;; a catch or unwind block
   (catch-block stack :element-size kludge-nondeterministic-catch-block-size))
 
@@ -394,6 +404,7 @@
 (defparameter *double-sc-names* '(double-reg double-stack))
 (defparameter *complex-sc-names* '(complex-single-reg complex-single-stack
                                    complex-double-reg complex-double-stack))
+(defparameter *oword-sc-names* '(sse-reg sse-stack))
 ) ; EVAL-WHEN
 
 ;;;; miscellaneous TNs for the various registers
@@ -475,7 +486,10 @@
        (sc-number-or-lose
         (if (eql value #c(0d0 0d0))
             'fp-complex-double-zero
-            'fp-complex-double-immediate)))))
+            'fp-complex-double-immediate)))
+    #-sb-xc-host
+    (sse-pack
+       (sc-number-or-lose 'sse-pack-immediate))))
 
 (!def-vm-support-routine boxed-immediate-sc-p (sc)
   (eql sc (sc-number-or-lose 'immediate)))

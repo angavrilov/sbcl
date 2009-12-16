@@ -198,7 +198,9 @@
 (progn
   (defknown sse-pack-p (t) boolean (foldable flushable))
   (defknown %make-sse-pack ((unsigned-byte 64) (unsigned-byte 64))
-      sse-pack))
+      sse-pack)
+  (defknown (%sse-pack-low %sse-pack-high) (sse-pack)
+      (unsigned-byte 64)))
 
 ;;;; threading
 

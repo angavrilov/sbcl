@@ -1423,6 +1423,8 @@
      ;; FIXME: might as well be COND instead of having to use #. readmacro
      ;; to hack up the code
      (case (sc-name (tn-sc thing))
+       (#.*oword-sc-names*
+        :oword)
        (#.*qword-sc-names*
         :qword)
        (#.*dword-sc-names*
@@ -3288,7 +3290,12 @@
       ((complex single-float)
          (setf constant (list :complex-single-float first)))
       ((complex double-float)
-         (setf constant (list :complex-double-float first)))))
+         (setf constant (list :complex-double-float first)))
+      #-sb-xc-host
+      (sse-pack
+         (setf constant (list :sse (logior (%sse-pack-low first)
+                                           (ash (%sse-pack-high first)
+                                                64)))))))
   (destructuring-bind (type value) constant
     (ecase type
       ((:byte :word :dword :qword)

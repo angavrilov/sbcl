@@ -361,11 +361,10 @@
 #!+sb-sse-intrinsics
 (define-primitive-object (sse-pack
                           :lowtag other-pointer-lowtag
-                          :widetag sse-pack-widetag
-                          :alloc-trans %make-sse-pack)
+                          :widetag sse-pack-widetag)
   (filler)
-  (lo-value :c-type "long" :type (unsigned-byte 64) :init :arg)
-  (hi-value :c-type "long" :type (unsigned-byte 64) :init :arg))
+  (lo-value :c-type "long" :type (unsigned-byte 64))
+  (hi-value :c-type "long" :type (unsigned-byte 64)))
 
 ;;; this isn't actually a lisp object at all, it's a c structure that lives
 ;;; in c-land.  However, we need sight of so many parts of it from Lisp that
