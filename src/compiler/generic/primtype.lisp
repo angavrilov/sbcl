@@ -95,7 +95,14 @@
 (/show0 "about to !DEF-PRIMITIVE-TYPE COMPLEX-DOUBLE-FLOAT")
 (!def-primitive-type complex-double-float (complex-double-reg descriptor-reg)
   :type (complex double-float))
-
+#!+sb-sse-intrinsics
+(progn
+  (/show0 "about to !DEF-PRIMITIVE-TYPE SSE-PACK")
+  (!def-primitive-type float-sse-pack (sse-reg descriptor-reg)
+   :type (sse-pack float))
+  (!def-primitive-type int-sse-pack (sse-reg descriptor-reg)
+   :type (sse-pack integer))
+  (!def-primitive-type-alias sse-pack (:or float-sse-pack int-sse-pack)))
 
 ;;; primitive other-pointer array types
 (/show0 "primtype.lisp 96")
@@ -372,8 +379,20 @@
                     (= (cdar pairs) (1- sb!xc:char-code-limit)))
                (exactly character)
                (part-of character))))
+        ;; This is a hack: the primitive types are exactly the same.
+        ;; However, we'd like to be able to tell the compiler how
+        ;; values should be moved around (movaps vs movdqa).
+        #!+sb-sse-intrinsics
+        (sse-pack-type
+           (if (eql 'float (sse-pack-type-supertype type))
+               (exactly float-sse-pack)
+               (exactly int-sse-pack)))
         (built-in-classoid
          (case (classoid-name type)
+           #!+sb-sse-intrinsics
+           ;; Can't tell what specific type; assume integers.
+           (sse-pack
+              (exactly int-sse-pack))
            ((complex function system-area-pointer weak-pointer)
             (values (primitive-type-or-lose (classoid-name type)) t))
            (cons-type

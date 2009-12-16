@@ -194,6 +194,12 @@
 (defknown make-value-cell (t) t
   (flushable movable))
 
+#!+sb-sse-intrinsics
+(progn
+  (defknown sse-pack-p (t) boolean (foldable flushable))
+  (defknown %make-sse-pack ((unsigned-byte 64) (unsigned-byte 64))
+      sse-pack))
+
 ;;;; threading
 
 (defknown (dynamic-space-free-pointer binding-stack-pointer-sap

@@ -39,6 +39,10 @@
 (!define-type-vops ratiop check-ratio ratio object-not-ratio-error
   (ratio-widetag))
 
+#!+sb-sse-intrinsics
+(!define-type-vops sse-pack-p check-sse-pack sse-pack object-not-sse-pack-error
+  (sse-pack-widetag))
+
 (!define-type-vops complexp check-complex complex object-not-complex-error
   (complex-widetag complex-single-float-widetag complex-double-float-widetag
                    #!+long-float complex-long-float-widetag))

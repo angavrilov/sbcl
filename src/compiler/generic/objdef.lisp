@@ -358,6 +358,15 @@
   (real :c-type "double" :length #!-x86-64 2 #!+x86-64 1)
   (imag :c-type "double" :length #!-x86-64 2 #!+x86-64 1))
 
+#!+sb-sse-intrinsics
+(define-primitive-object (sse-pack
+                          :lowtag other-pointer-lowtag
+                          :widetag sse-pack-widetag
+                          :alloc-trans %make-sse-pack)
+  (filler)
+  (lo-value :c-type "long" :type (unsigned-byte 64) :init :arg)
+  (hi-value :c-type "long" :type (unsigned-byte 64) :init :arg))
+
 ;;; this isn't actually a lisp object at all, it's a c structure that lives
 ;;; in c-land.  However, we need sight of so many parts of it from Lisp that
 ;;; it makes sense to define it here anyway, so that the GENESIS machinery

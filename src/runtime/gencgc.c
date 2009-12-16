@@ -3081,6 +3081,9 @@ verify_space(lispobj *start, size_t words)
 #ifdef COMPLEX_LONG_FLOAT_WIDETAG
                 case COMPLEX_LONG_FLOAT_WIDETAG:
 #endif
+#ifdef SSE_PACK_WIDETAG
+                case SSE_PACK_WIDETAG:
+#endif
                 case SIMPLE_BASE_STRING_WIDETAG:
 #ifdef SIMPLE_CHARACTER_STRING_WIDETAG
                 case SIMPLE_CHARACTER_STRING_WIDETAG:

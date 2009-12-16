@@ -175,7 +175,10 @@
 
   no-tls-value-marker-widetag               ; 01011010
   unused01-widetag                          ; 01011110
-  unused02-widetag                          ; 01100010
+  #!-sb-sse-intrinsics
+  unused02-widetag
+  #!+sb-sse-intrinsics
+  sse-pack-widetag                          ; 01100010
   unused03-widetag                          ; 01100110
   unused04-widetag                          ; 01101010
   unused05-widetag                          ; 01101110

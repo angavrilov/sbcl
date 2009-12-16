@@ -1100,6 +1100,11 @@
       :inherits (complex number)
       :codes (#.sb!vm:complex-long-float-widetag)
       :prototype-form (complex 42l0 42l0))
+     #!+sb-sse-intrinsics
+     (sse-pack
+      :translation sse-pack
+      :codes (#.sb!vm:sse-pack-widetag)
+      :prototype-form (%make-sse-pack 42 42))
      (real :translation real :inherits (number))
      (float
       :translation float
