@@ -82,7 +82,7 @@
   (declare (values hash (member t nil)))
   (typecase key
     ;; For some types the definition of EQUAL implies a special hash
-    ((or string cons number bit-vector pathname)
+    ((or string cons number bit-vector pathname #!+sb-sse-intrinsics sse-pack)
      (values (sxhash key) nil))
     ;; Otherwise use an EQ hash, rather than SXHASH, since the values
     ;; of SXHASH will be extremely badly distributed due to the
@@ -94,7 +94,8 @@
 #!-sb-fluid (declaim (inline eql-hash))
 (defun eql-hash (key)
   (declare (values hash (member t nil)))
-  (if (numberp key)
+  (if (or (numberp key)
+          #!+sb-sse-intrinsics (sse-pack-p key))
       (equal-hash key)
       (eq-hash key)))
 

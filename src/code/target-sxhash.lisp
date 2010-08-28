@@ -225,6 +225,10 @@
                ;; general, inefficient case of NUMBER
                (number (sxhash-number x))
                (generic-function (sxhash-instance x))
+               #!+sb-sse-intrinsics
+               (sse-pack
+                (mix (sxhash-number (%sse-pack-low x))
+                     (sxhash-number (%sse-pack-high x))))
                (t 42))))
     (sxhash-recurse x +max-hash-depthoid+)))
 

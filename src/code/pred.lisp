@@ -203,7 +203,8 @@
   "Return T if OBJ1 and OBJ2 represent the same object, otherwise NIL."
   (or (eq obj1 obj2)
       (if (or (typep obj2 'fixnum)
-              (not (typep obj2 'number)))
+              (not (or (typep obj2 'number)
+                       #!+sb-sse-intrinsics (typep obj2 'sse-pack))))
           nil
           (macrolet ((foo (&rest stuff)
                        `(typecase obj2
@@ -229,7 +230,12 @@
              (complex
               (lambda (x y)
                 (and (eql (realpart x) (realpart y))
-                     (eql (imagpart x) (imagpart y))))))))))
+                     (eql (imagpart x) (imagpart y)))))
+             #!+sb-sse-intrinsics
+             (sse-pack
+              (lambda (x y)
+                (and (eql (%sse-pack-low x) (%sse-pack-low y))
+                     (eql (%sse-pack-high x) (%sse-pack-high y))))))))))
 
 (defun eql (x y)
   (%eql x y))
