@@ -585,12 +585,18 @@
 
   ;; Generate a reference to a manifest constant, creating a new leaf
   ;; if necessary.
-  (defun reference-constant (start next result value)
+  (defun reference-constant (start next result value &key type-hint)
     (declare (type ctran start next)
-             (type (or lvar null) result))
+             (type (or lvar null) result)
+             (ignorable type-hint))
     (ir1-error-bailout (start next result value)
       (let* ((leaf (find-constant value))
              (res (make-ref leaf)))
+        #!+sb-sse-intrinsics
+        (when (and type-hint
+                   #-sb-xc-host (sse-pack-p value) #+sb-xc-host nil
+                   (csubtypep (single-value-type type-hint) (leaf-type leaf)))
+          (setf (leaf-type leaf) (single-value-type type-hint)))
         (push res (leaf-refs leaf))
         (link-node-to-previous-ctran res start)
         (use-continuation res next result)))

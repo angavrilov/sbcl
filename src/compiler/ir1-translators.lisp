@@ -902,7 +902,11 @@ other."
 (defun the-in-policy (type value policy start next result)
   (let ((type (if (ctype-p type) type
                    (compiler-values-specifier-type type))))
-    (cond ((or (eq type *wild-type*)
+    (cond #!+sb-sse-intrinsics
+          ((and #-sb-xc-host (sse-pack-p value) #+sb-xc-host nil
+                (ctypep value (single-value-type type)))
+           (reference-constant start next result value :type-hint type))
+          ((or (eq type *wild-type*)
                (eq type *universal-type*)
                (and (leaf-p value)
                     (values-subtypep (make-single-value-type (leaf-type value))

@@ -1385,7 +1385,8 @@
                  (setf (ctran-next prev) nil)
                  (setf (node-prev call) nil)
                  (reference-constant prev intermediate-ctran lvar
-                                     (first values))
+                                     (first values)
+                                     :type-hint (combination-derived-type call))
                  (link-node-to-previous-ctran call intermediate-ctran)
                  (reoptimize-lvar lvar)
                  (flush-combination call))))
