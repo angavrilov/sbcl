@@ -13,9 +13,7 @@
 
 (defun ea-for-sse-stack (tn &optional (base rbp-tn))
   (make-ea :qword :base base
-           :disp (- (* (+ (tn-offset tn)
-                          2)
-                       n-word-bytes))))
+           :disp (frame-byte-offset (1+ (tn-offset tn)))))
 
 (defun float-sse-pack-p (tn)
   (eq (sb!c::tn-primitive-type tn) (primitive-type-or-lose 'float-sse-pack)))
@@ -143,16 +141,13 @@
   (:args (lo :scs (unsigned-reg))
          (hi :scs (unsigned-reg)))
   (:arg-types unsigned-num unsigned-num)
-  (:temporary (:sc sse-stack :target dst :to :result) tmp)
-  (:results (dst :scs (sse-reg sse-stack)))
+  (:temporary (:sc sse-reg) tmp)
+  (:results (dst :scs (sse-reg)))
   (:result-types sse-pack)
   (:generator 5
-    (let ((offset (- (* (1+ (tn-offset tmp))
-                        n-word-bytes))))
-      (inst mov (make-ea :qword :base rbp-tn :disp (- offset 8)) lo)
-      (inst mov (make-ea :qword :base rbp-tn :disp offset) hi))
-    (unless (location= dst tmp)
-      (inst movdqu dst (ea-for-sse-stack tmp)))))
+    (inst movd dst lo)
+    (inst movd tmp hi)
+    (inst punpcklqdq dst tmp)))
 
 (defun %make-sse-pack (low high)
   (declare (type (unsigned-byte 64) low high))
