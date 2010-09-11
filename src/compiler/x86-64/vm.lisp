@@ -243,6 +243,7 @@
   (fp-complex-single-immediate immediate-constant)
   (fp-complex-double-immediate immediate-constant)
 
+  (sse-pack-magic-immediate immediate-constant)
   (sse-pack-immediate immediate-constant)
 
   (immediate immediate-constant)
@@ -380,7 +381,7 @@
   #!+sb-sse-intrinsics
   (sse-reg float-registers
            :locations #.*float-regs*
-           :constant-scs (sse-pack-immediate)
+           :constant-scs (sse-pack-immediate sse-pack-magic-immediate)
            :save-p t
            :alternate-scs (sse-stack))
 
@@ -489,7 +490,11 @@
             'fp-complex-double-immediate)))
     #-sb-xc-host
     (sse-pack
-       (sc-number-or-lose 'sse-pack-immediate))))
+     (if (member value (load-time-value
+                        (list (%make-sse-pack 0 0)
+                              (%make-sse-pack #xFFFFFFFFFFFFFFFF #xFFFFFFFFFFFFFFFF))))
+         (sc-number-or-lose 'sse-pack-magic-immediate)
+         (sc-number-or-lose 'sse-pack-immediate)))))
 
 (!def-vm-support-routine boxed-immediate-sc-p (sc)
   (eql sc (sc-number-or-lose 'immediate)))

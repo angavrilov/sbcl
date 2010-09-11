@@ -27,6 +27,21 @@
         (inst movaps y x)
         (inst movdqa y x))))
 
+(define-move-fun (load-sse-pack-magic 1) (vop x y)
+  ((sse-pack-magic-immediate) (sse-reg))
+  (cond ((eql (tn-value x)
+              (load-time-value #-sb-xc-host (%make-sse-pack 0 0)
+                               #+sb-xc-host nil))
+         (if (float-sse-pack-p y)
+             (inst xorps y y)
+             (inst pxor y y)))
+        ((eql (tn-value x)
+              (load-time-value #-sb-xc-host (%make-sse-pack #xFFFFFFFFFFFFFFFF #xFFFFFFFFFFFFFFFF)
+                               #+sb-xc-host nil))
+         ;; Can't use float here due to NaNs
+         (inst pcmpeqd y y))
+        (t (error "Invalid magic pack: ~S" (tn-value x)))))
+
 (define-move-fun (load-sse-pack 2) (vop x y)
     ((sse-stack) (sse-reg))
   (if (or (float-sse-pack-p x) (float-sse-pack-p y))
