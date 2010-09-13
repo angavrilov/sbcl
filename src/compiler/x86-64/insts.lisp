@@ -3193,10 +3193,6 @@
   (define-regular-sse-inst cvtss2sd #xf3 #x5a)
   (define-regular-sse-inst cvttpd2dq #x66 #xe6)
   (define-regular-sse-inst cvttps2dq #xf3 #x5b)
-  ;; moves
-  (define-regular-sse-inst movntdq #x66 #xe7)
-  (define-regular-sse-inst movntpd #x66 #x2b)
-  (define-regular-sse-inst movntps nil #x2b)
   ;; integer
   (define-regular-sse-inst packsswb  #x66 #x63)
   (define-regular-sse-inst packssdw  #x66 #x6b)
@@ -3290,33 +3286,36 @@
                          (aver (xmm-register-p src))
                          (emit-regular-sse-inst segment dst src ,prefix ,opcode-from))))
                   (define-instruction ,name (segment dst src)
-                    ,@(if prefix
-                          `((:printer ext-xmm-xmm/mem
-                                      ((prefix ,prefix) (op ,opcode-from)))
-                            (:printer ext-rex-xmm-xmm/mem
-                                      ((prefix ,prefix) (op ,opcode-from)))
-                            (:printer ext-xmm-xmm/mem
-                                      ((prefix ,prefix) (op ,opcode-to))
-                                      '(:name :tab reg/mem ", " reg))
-                            (:printer ext-rex-xmm-xmm/mem
-                                      ((prefix ,prefix) (op ,opcode-to))
-                                      '(:name :tab reg/mem ", " reg)))
-                          `((:printer xmm-xmm/mem
-                                      ((op ,opcode-from)))
-                            (:printer rex-xmm-xmm/mem
-                                      ((op ,opcode-from)))
-                            (:printer xmm-xmm/mem
-                                      ((op ,opcode-to))
-                                      '(:name :tab reg/mem ", " reg))
-                            (:printer rex-xmm-xmm/mem
-                                      ((op ,opcode-to))
-                                      '(:name :tab reg/mem ", " reg))))
+                    ,@(let ((printers
+                             (if prefix
+                                 `((:printer ext-xmm-xmm/mem
+                                             ((prefix ,prefix) (op ,opcode-from)))
+                                   (:printer ext-rex-xmm-xmm/mem
+                                             ((prefix ,prefix) (op ,opcode-from)))
+                                   (:printer ext-xmm-xmm/mem
+                                             ((prefix ,prefix) (op ,opcode-to))
+                                             '(:name :tab reg/mem ", " reg))
+                                   (:printer ext-rex-xmm-xmm/mem
+                                             ((prefix ,prefix) (op ,opcode-to))
+                                             '(:name :tab reg/mem ", " reg)))
+                                 `((:printer xmm-xmm/mem
+                                             ((op ,opcode-from)))
+                                   (:printer rex-xmm-xmm/mem
+                                             ((op ,opcode-from)))
+                                   (:printer xmm-xmm/mem
+                                             ((op ,opcode-to))
+                                             '(:name :tab reg/mem ", " reg))
+                                   (:printer rex-xmm-xmm/mem
+                                             ((op ,opcode-to))
+                                             '(:name :tab reg/mem ", " reg))))))
+                        (if opcode-from printers (cddr printers)))
                     (:emitter
-                     (cond ((xmm-register-p dst)
-                            ,(when force-to-mem
-                               `(aver (not (or (register-p src)
-                                               (xmm-register-p src)))))
-                            (emit-regular-sse-inst segment dst src ,prefix ,opcode-from))
+                     (cond ,@(when opcode-from
+                               `(((xmm-register-p dst)
+                                  ,(when force-to-mem
+                                     `(aver (not (or (register-p src)
+                                                     (xmm-register-p src)))))
+                                  (emit-regular-sse-inst segment dst src ,prefix ,opcode-from))))
                            (t
                             (aver (xmm-register-p src))
                             ,(when force-to-mem
@@ -3328,6 +3327,11 @@
   (define-mov-sse-inst movaps nil  #x28 #x29)
   (define-mov-sse-inst movdqa #x66 #x6f #x7f)
   (define-mov-sse-inst movdqu #xf3 #x6f #x7f)
+
+  ;; streaming
+  (define-mov-sse-inst movntdq #x66 nil #xe7 :force-to-mem t)
+  (define-mov-sse-inst movntpd #x66 nil #x2b :force-to-mem t)
+  (define-mov-sse-inst movntps nil  nil #x2b :force-to-mem t)
 
   ;; use movhps for movlhps and movlps for movhlps
   (define-mov-sse-inst movhpd #x66 #x16 #x17 :force-to-mem t)
