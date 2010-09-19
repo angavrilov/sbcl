@@ -3380,6 +3380,38 @@
           (aver (xmm-register-p src))
           (emit-sse-inst segment src dst #x66 #x7e)))))
 
+(define-instruction pinsrw (segment dst src imm)
+  (:printer-list
+   (sse-inst-printer-list
+    'xmm-reg/mem #x66 #xc4
+    :more-fields '((imm nil :type imm-byte))
+    :printer '(:name :tab reg ", " reg/mem ", " imm)))
+  (:emitter
+   (aver (xmm-register-p dst))
+   (let ((src-size (operand-size src)))
+     (aver (or (not (register-p src))
+               (eq src-size :qword) (eq src-size :dword)))
+     (emit-sse-inst segment dst src #x66 #xc4
+                    :operand-size (if (register-p src) src-size :do-not-set)
+                    :remaining-bytes 1))
+   (emit-byte segment imm)))
+
+(define-instruction pextrw (segment dst src imm)
+  (:printer-list
+   (sse-inst-printer-list
+    'reg-xmm/mem #x66 #xc5
+    :more-fields '((imm nil :type imm-byte))
+    :printer '(:name :tab reg ", " reg/mem ", " imm)))
+  (:emitter
+   (aver (xmm-register-p src))
+   (aver (register-p dst))
+   (let ((dst-size (operand-size dst)))
+     (aver (or (eq dst-size :qword) (eq dst-size :dword)))
+     (emit-sse-inst segment dst src #x66 #xc5
+                    :operand-size dst-size
+                    :remaining-bytes 1))
+   (emit-byte segment imm)))
+
 (macrolet ((define-integer-source-sse-inst (name prefix opcode &key mem-only)
              `(define-instruction ,name (segment dst src)
                 ,@(if prefix
