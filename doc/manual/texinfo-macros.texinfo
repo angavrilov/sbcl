@@ -34,4 +34,24 @@
 @macro setf{name}
 (setf \name\)
 @end macro
+
+@c A generic package annotation
+@iftex
+@macro somepkg{name,pkg}
+{@smallertt@phantom{concurrency:}@llap{\pkg\:}}\name\
+@end macro
+@end iftex
+@ifinfo
+@macro somepkg{name,pkg}
+\name\
+@end macro
+@end ifinfo
+@ifnottex
+@ifnotinfo
+@macro somepkg{name,pkg}
+\name\ [\pkg\]
+@end macro
+@end ifnotinfo
+@end ifnottex
+
 @include docstrings/package-macros.texinfo
