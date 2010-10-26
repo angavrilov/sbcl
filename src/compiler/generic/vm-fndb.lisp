@@ -200,7 +200,11 @@
   (defknown %make-sse-pack ((unsigned-byte 64) (unsigned-byte 64))
       sse-pack)
   (defknown (%sse-pack-low %sse-pack-high) (sse-pack)
-      (unsigned-byte 64)))
+      (unsigned-byte 64))
+  (defknown (%sse-pack-floats) (sse-pack)
+      (values single-float single-float single-float single-float))
+  (defknown (%sse-pack-doubles) (sse-pack)
+      (values double-float double-float)))
 
 ;;;; threading
 

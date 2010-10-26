@@ -152,3 +152,46 @@
 (defun %make-sse-pack (low high)
   (declare (type (unsigned-byte 64) low high))
   (%make-sse-pack low high))
+
+(define-vop (%sse-pack-float-item)
+  (:args (x :scs (sse-reg)))
+  (:arg-types sse-pack)
+  (:info index)
+  (:results (dst :scs (single-reg)))
+  (:result-types single-float)
+  (:temporary (:sc sse-reg) tmp)
+  (:policy :fast-safe)
+  (:generator 3
+    (inst movdqa tmp x)
+    (inst psrldq tmp (* 4 index))
+    (inst xorps dst dst)
+    (inst movss dst tmp)))
+
+#-sb-xc-host
+(defun %sse-pack-floats (pack)
+  (declare (type sse-pack pack))
+  (values (%primitive %sse-pack-float-item pack 0)
+          (%primitive %sse-pack-float-item pack 1)
+          (%primitive %sse-pack-float-item pack 2)
+          (%primitive %sse-pack-float-item pack 3)))
+
+(define-vop (%sse-pack-double-item)
+  (:args (x :scs (sse-reg)))
+  (:info index)
+  (:arg-types sse-pack)
+  (:results (dst :scs (double-reg)))
+  (:result-types double-float)
+  (:temporary (:sc sse-reg) tmp)
+  (:policy :fast-safe)
+  (:generator 3
+    (inst movdqa tmp x)
+    (inst psrldq tmp (* 8 index))
+    (inst xorpd dst dst)
+    (inst movsd dst tmp)))
+
+#-sb-xc-host
+(defun %sse-pack-doubles (pack)
+  (declare (type sse-pack pack))
+  (values (%primitive %sse-pack-double-item pack 0)
+          (%primitive %sse-pack-double-item pack 1)))
+

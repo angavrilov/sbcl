@@ -74,6 +74,11 @@
   #!+sb-doc
   "Suppress printer errors when the condition is of the type designated by this
 variable: an unreadable object representing the error is printed instead.")
+#!+sb-sse-intrinsics
+(defvar *sse-pack-print-mode* nil
+  #!+sb-doc
+  "If this variable is set to :float or :double, SSE pack contents are printed
+   as values of the specified type, unless *print-readably* is also set.")
 
 (defmacro with-standard-io-syntax (&body body)
   #!+sb-doc
@@ -1776,16 +1781,38 @@ variable: an unreadable object representing the error is printed instead.")
 #!+sb-sse-intrinsics
 (defun output-sse-pack (pack stream)
   (declare (type sse-pack pack))
-  (cond (*read-eval*
+  (cond ((and *print-readably* *read-eval*)
          (format stream "#.(~S #X~16,'0X #X~16,'0X)"
                  '%make-sse-pack
                  (%sse-pack-low  pack)
                  (%sse-pack-high pack)))
         (t
          (print-unreadable-object (pack stream)
-           (format stream "SSE pack: #X~16,'0X:#X~16,'0X"
-                   (%sse-pack-low  pack)
-                   (%sse-pack-high pack))))))
+           (let ((low (%sse-pack-low  pack))
+                 (high (%sse-pack-high pack)))
+             (flet ((bits-set? (value start end &aux (mask (- (ash 1 end) (ash 1 start))))
+                      (= (logand value mask) mask))
+                    (split-num (value start)
+                      (loop
+                         for i from 0 to 3
+                         and v = (ash value (- start)) then (ash v -8)
+                         collect (logand v #xFF))))
+               (case *sse-pack-print-mode*
+                 ;; "Floating-point" values of all 1 bits are printed as TRUE:
+                 (:float (multiple-value-bind (v0 v1 v2 v3) (%sse-pack-floats pack)
+                           (format stream "SSE~@{ ~:[~,7E~;~*TRUE~]~}"
+                                   (bits-set? low 0 32) v0
+                                   (bits-set? low 32 64) v1
+                                   (bits-set? high 0 32) v2
+                                   (bits-set? high 32 64) v3)))
+                 (:double (multiple-value-bind (v0 v1) (%sse-pack-doubles pack)
+                            (format stream "SSE~@{ ~:[~,13E~;~*TRUE~]~}"
+                                    (bits-set? low 0 64) v0
+                                    (bits-set? high 0 64) v1)))
+                 ;; Otherwise print individual bytes in hex in memory order:
+                 (t (format stream "SSE~@{ ~{ ~2,'0X~}~}"
+                            (split-num low 0) (split-num low 32)
+                            (split-num high 0) (split-num high 32))))))))))
 
 ;;;; functions
 
