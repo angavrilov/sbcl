@@ -327,27 +327,52 @@
   (declare (type lambda-var x) (type constraint-y y) (type boolean not-p))
   (etypecase y
     (ctype
-     (do-conset-elements (con (lambda-var-constraints x) nil)
-       (when (and (eq (constraint-kind con) kind)
-                  (eq (constraint-not-p con) not-p)
-                  (type= (constraint-y con) y))
-         (return con))))
+       (let ((index (lambda-var-ctype-constraints x)))
+         (when index
+           (dolist (con (gethash (sb!kernel::type-class-info y) index) nil)
+             (when (and (eq (constraint-kind con) kind)
+                        (eq (constraint-not-p con) not-p)
+                        (type= (constraint-y con) y))
+               (return-from find-constraint con)))
+           nil)))
     ((or lvar constant)
-     (do-conset-elements (con (lambda-var-constraints x) nil)
-       (when (and (eq (constraint-kind con) kind)
-                  (eq (constraint-not-p con) not-p)
-                  (eq (constraint-y con) y))
-         (return con))))
+       (let ((index (lambda-var-eq-constraints x)))
+         (when index
+           (dolist (con (gethash y index) nil)
+             (when (and (eq (constraint-kind con) kind)
+                        (eq (constraint-not-p con) not-p)
+                        (eq (constraint-y con) y))
+               (return con))))))
     (lambda-var
-     (do-conset-elements (con (lambda-var-constraints x) nil)
-       (when (and (eq (constraint-kind con) kind)
-                  (eq (constraint-not-p con) not-p)
-                  (let ((cx (constraint-x con)))
-                    (eq (if (eq cx x)
-                            (constraint-y con)
-                            cx)
-                        y)))
-         (return con))))))
+       (let ((index (lambda-var-eq-constraints x)))
+         (when index
+           (dolist (con (gethash y index) nil)
+             (when (and (eq (constraint-kind con) kind)
+                        (eq (constraint-not-p con) not-p)
+                        (let ((cx (constraint-x con)))
+                          (eq (if (eq cx x)
+                                  (constraint-y con)
+                                  cx)
+                              y)))
+               (return con))))))))
+
+(defun register-constraint (x con y)
+  (declare (type lambda-var x)
+           (type constraint con)
+           (type constraint-y y))
+  (conset-adjoin con (lambda-var-constraints x))
+  (etypecase y
+    (ctype
+       (let ((index (or (lambda-var-ctype-constraints x)
+                        (setf (lambda-var-ctype-constraints x)
+                              (make-hash-table)))))
+         (push con (gethash (sb!kernel::type-class-info y) index))))
+    ((or lvar constant lambda-var)
+       (let ((index (or (lambda-var-eq-constraints x)
+                        (setf (lambda-var-eq-constraints x)
+                              (make-hash-table)))))
+         (push con (gethash y index)))))
+  nil)
 
 ;;; Return a constraint for the specified arguments. We only create a
 ;;; new constraint if there isn't already an equivalent old one,
@@ -360,9 +385,9 @@
                                   kind x y not-p)))
         (vector-push-extend new *constraint-universe*
                             (1+ (length *constraint-universe*)))
-        (conset-adjoin new (lambda-var-constraints x))
+        (register-constraint x new y)
         (when (lambda-var-p y)
-          (conset-adjoin new (lambda-var-constraints y)))
+          (register-constraint y new x))
         new)))
 
 ;;; If REF is to a LAMBDA-VAR with CONSTRAINTs (i.e. we can do flow
