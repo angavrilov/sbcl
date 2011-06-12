@@ -96,7 +96,6 @@
 ;;; for constraint propagation, or if bit-vectors on some XC host
 ;;; really lose compared to SSETs, here's the conset API as a wrapper
 ;;; around SSETs:
-#+nil
 (progn
   (deftype conset () 'sset)
   (declaim (ftype (sfunction (conset) boolean) conset-empty))
@@ -107,14 +106,16 @@
   (declaim (ftype (sfunction (conset conset) (values)) conset-union))
   (declaim (ftype (sfunction (conset conset) (values)) conset-intersection))
   (declaim (ftype (sfunction (conset conset) (values)) conset-difference))
+  (declaim (inline make-conset conset-empty copy-conset
+                   conset-member conset-adjoin conset=
+                   conset-union conset-intersection conset-difference))
   (defun make-conset () (make-sset))
   (defmacro do-conset-elements ((constraint conset &optional result) &body body)
     `(do-sset-elements (,constraint ,conset ,result) ,@body))
   (defmacro do-conset-intersection
       ((constraint conset1 conset2 &optional result) &body body)
-    `(do-conset-elements (,constraint ,conset1 ,result)
-       (when (conset-member ,constraint ,conset2)
-         ,@body)))
+    `(do-sset-intersection (,constraint ,conset1 ,conset2 ,result)
+       ,@body))
   (defun conset-empty (conset) (sset-empty conset))
   (defun copy-conset (conset) (copy-sset conset))
   (defun conset-member (constraint conset) (sset-member constraint conset))
@@ -131,6 +132,7 @@
   (defun conset-difference (conset1 conset2)
     (sset-difference conset1 conset2) (values)))
 
+#+nil
 (locally
     ;; This is performance critical for the compiler, and benefits
     ;; from the following declarations.  Probably you'll want to

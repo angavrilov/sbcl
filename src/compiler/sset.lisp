@@ -26,7 +26,7 @@
 (def!struct (sset-element (:constructor nil)
                          (:copier nil))
   (number nil :type (or index null))
-  (hash     0 :type (and unsigned-byte fixnum)))
+  (hash   most-positive-fixnum :type (and unsigned-byte fixnum)))
 
 #||
 (defstruct (sset (:copier nil))
@@ -391,18 +391,17 @@
           for x = (aref table i)
           do (when (eq x element)
                (decf (sset-count sset))
-               (loop for j from (1+ i) below size
-                     for x = (aref table j)
-                     do
-                     (when (null x)
-                       (setf (aref table (1- j)) nil)
-                       (return))
-                     (let ((loc (interpolate (sset-element-hash x) length)))
-                       (cond ((< loc j)
-                              (setf (aref table (1- j)) x))
-                             (t
-                              (setf (aref table (1- j)) nil)
-                              (return)))))
+               (let ((last (loop for j from (1+ i) below size
+                                 for x = (aref table j)
+                                 do
+                              (when (null x)
+                                (return j))
+                              (let ((loc (interpolate (sset-element-hash x) length)))
+                                (if (< loc j)
+                                    (setf (aref table (1- j)) x)
+                                    (return j)))
+                                 finally (return size))))
+                 (setf (aref table (1- last)) nil))
                (return t))
              (when (or (null x)
                        (> (sset-element-hash x) hash))
@@ -421,7 +420,7 @@
          (sset-table sset))))
 
 (defmacro do-sset-elements ((var sset &optional result) &body body)
-  `(progn
+  `(block nil
      (%call-with-sset-elements ,sset (lambda (,var) ,@body))
      ,result))
 
@@ -519,7 +518,6 @@
                        t
                        deltap)))))
 
-
 (defun sset-clean-deletions (sset)
   (declare (type sset sset)
            (optimize speed))
@@ -536,6 +534,8 @@
 (defun sset-intersection (dst src)
   (declare (type sset dst src)
            (optimize speed))
+  (when (eq dst src)
+    (return-from sset-intersection nil))
   (let ((table  (sset-table dst))
         (deltap nil))
     (loop for i below (length table)
@@ -544,12 +544,19 @@
                         (not (sset-member x src)))
                (setf deltap         t
                      (aref table i) nil)))
-      (sset-clean-deletions dst)
+    (when deltap
+      (sset-clean-deletions dst))
     deltap))
 
 (defun sset-difference (dst src)
   (declare (type sset dst src)
            (optimize speed))
+  (when (sset-empty dst)
+    (return-from sset-difference nil))
+  (when (eq dst src)
+    (fill (sset-table dst) nil)
+    (setf (sset-count dst) 0)
+    (return-from sset-difference t))
   (let ((table  (sset-table dst))
         (deltap nil))
     (loop for i below (length table)
@@ -607,7 +614,7 @@
                     (setf x2 (src2 x1))))))))))
 
 (defmacro do-sset-intersection ((var sset1 sset2 &optional result) &body body)
-  `(progn
+  `(block nil
      (%call-with-sset-intersection ,sset1 ,sset2 (lambda (,var) ,@body))
      ,result))
 
