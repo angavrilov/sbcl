@@ -339,15 +339,27 @@
 ;;      i.e. all but EQL lvars and constants
 ;;  - Forget everything about a given variable
 ;;  - take the intersection/union of CBLOCK consets, and other usual stuff
+(locally (declare (optimize speed (safety 0)))
 (deftype maybe (x)
   `(or null ,x))
 
 (defstruct (block-conset
+             (:constructor %make-block-conset)
              (:copier nil))
   ;; lambda-var set
   (vars (make-sset)       :type sset)
   ;; lambda-var -> var-info
-  (data (make-hash-table) :type hash-table))
+  ;; NIL if dump block-conset
+  (data (make-hash-table) :type (maybe hash-table)))
+
+(defvar *heavy-consets* nil)
+
+(declaim (inline make-block-conset))
+(defun make-block-conset (&key vars data)
+  (%make-block-conset :vars (or vars (make-sset))
+                      :data (or data
+                                (and *heavy-consets*
+                                     (make-hash-table)))))
 
 (defmacro do-block-conset-vars ((var info conset &optional result) &body body)
   (let ((_conset (gensym "BCONSET"))
@@ -537,6 +549,10 @@
 (defun copy-block-conset (bconset)
   (declare (type block-conset bconset)
            (optimize speed (safety 0)))
+  (unless (block-conset-data bconset)
+    (return-from copy-block-conset
+      (%make-block-conset :vars (copy-sset (block-conset-vars bconset))
+                          :data nil)))
   (canonicalize-block-conset bconset)
   (let* ((copy (make-block-conset :vars (copy-sset (block-conset-vars bconset))))
          (new-data (block-conset-data copy)))
@@ -549,32 +565,33 @@
   (declare (type block-conset x y)
            (optimize speed (safety 0)))
   (and (sset= (block-conset-vars x) (block-conset-vars y))
-       (let ((x-data (block-conset-data x))
-             (y-data (block-conset-data y)))
-         (canonicalize-block-conset x)
-         (canonicalize-block-conset y)
-         (prog1
-             (do-sset-elements (var (block-conset-vars x) t)
-               (let* ((x-info  (gethash var x-data))
-                      (y-info  (gethash var y-data))
-                      (x-class (var-info-eqv-class x-info))
-                      (y-class (var-info-eqv-class y-info))
-                      (x-root  (eql var (eqv-class-info x-class)))
-                      (y-root  (eql var (eqv-class-info y-class))))
-                 (declare (type var-info x-info y-info))
-                 (unless (and (sset-designator= (var-info-eql-lvars x-info)
-                                                (var-info-eql-lvars y-info))
-                              (sset-designator= (var-info-private x-info)
-                                                (var-info-private y-info))
-                              (eql x-root y-root)
-                              (cond (x-root
-                                     (eqv-class= x-class y-class))
-                                    (t
-                                     (eql (eqv-class-info x-class)
-                                          (eqv-class-info y-class)))))
-                   (return nil))))
-           (clear-canonicalization-temporaries x)
-           (clear-canonicalization-temporaries y)))))
+       (or (null (block-conset-data x))
+           (let ((x-data (block-conset-data x))
+                 (y-data (block-conset-data y)))
+             (canonicalize-block-conset x)
+             (canonicalize-block-conset y)
+             (prog1
+                 (do-sset-elements (var (block-conset-vars x) t)
+                   (let* ((x-info  (gethash var x-data))
+                          (y-info  (gethash var y-data))
+                          (x-class (var-info-eqv-class x-info))
+                          (y-class (var-info-eqv-class y-info))
+                          (x-root  (eql var (eqv-class-info x-class)))
+                          (y-root  (eql var (eqv-class-info y-class))))
+                     (declare (type var-info x-info y-info))
+                     (unless (and (sset-designator= (var-info-eql-lvars x-info)
+                                                    (var-info-eql-lvars y-info))
+                                  (sset-designator= (var-info-private x-info)
+                                                    (var-info-private y-info))
+                                  (eql x-root y-root)
+                                  (cond (x-root
+                                         (eqv-class= x-class y-class))
+                                        (t
+                                         (eql (eqv-class-info x-class)
+                                              (eqv-class-info y-class)))))
+                       (return nil))))
+               (clear-canonicalization-temporaries x)
+               (clear-canonicalization-temporaries y))))))
 
 ;; x, y already canonicalised
 (declaim (inline %block-conset-eql-intersection))
@@ -612,6 +629,8 @@
   ;; easy stuff
   (sset-intersection (block-conset-vars x)
                      (block-conset-vars y))
+  (unless (block-conset-data x)
+    (return-from block-conset-intersection x))
   (canonicalize-block-conset x t)
   (canonicalize-block-conset y t)
   ;; compute eql set intersection
@@ -663,12 +682,68 @@
                 (t
                  (setf (gethash var hash) (make-var-info :self var))))))))
 
+(defmacro do-eql-vars ((name (var bconset) &optional result) &body body)
+  `(let ((.var. ,var))
+     (do-sset-intersection (.con. (lambda-var-constraints .var.)
+                                  (block-conset-vars ,bconset) ,result)
+       (declare (type constraint .con.))
+       (let ((,name (and (eql 'eql (constraint-kind .con.))
+                         (not (constraint-not-p .con.))
+                         (let ((x (constraint-x .con.))
+                               (y (constraint-y .con.)))
+                           (cond ((eql .var. x)
+                                  y)
+                                 ((eql .var. y)
+                                  x))))))
+         (when (and ,name
+                    (lambda-var-p ,name))
+           (let ((,name ,name))
+             ,@body))))))
+
+(defun inherit-constraints (vars source constraints)
+  (declare (type list vars)
+           (type lambda-var source)
+           (type sset constraints))
+  (collect ((to-merge))
+    (do-sset-intersection (con (lambda-var-constraints source) constraints)
+      (let ((y (constraint-y con)))
+        (unless (or (lvar-p y)
+                    (and (not (constraint-not-p con))
+                         (or (constant-p y)
+                             (lambda-var-p y))))
+          (to-merge con))))
+    (dolist (con (to-merge))
+      (let* ((y (constraint-y con))
+             (kind  (constraint-kind con))
+             (not-p (constraint-not-p con))
+             (x     (constraint-x con))
+             (other (if (eq source x) y x)))
+        (dolist (var vars)
+          (conset-adjoin (find-or-create-constraint kind var other not-p)
+                         constraints))))))
+
+(defun eql-var-list (var conset)
+  (declare (type lambda-var var)
+           (type block-conset conset))
+  (collect ((vars))
+    (do-eql-vars (other (var conset) (vars))
+      (vars other))))
+
 (defun block-conset-assert-eql (bconset var1 var2)
   (declare (type block-conset bconset)
            (type lambda-var var1 var2)
            (optimize speed (safety 0)))
   (when (eql var1 var2)
     (return-from block-conset-assert-eql nil))
+  (unless (block-conset-data bconset)
+    (let ((sset     (block-conset-vars bconset))
+          (eql-var1 (cons var2 (eql-var-list var1 bconset)))
+          (eql-var2 (cons var1 (eql-var-list var2 bconset))))
+      (inherit-constraints eql-var1 var2 sset)
+      (dolist (x eql-var1)
+        (dolist (y eql-var2)
+          (sset-adjoin (find-or-create-constraint 'eql x y nil)
+                       sset)))))
   (let* ((info1 (ensure-block-conset-info bconset var1))
          (info2 (ensure-block-conset-info bconset var2))
          (eqv1  (var-info-eqv-class info1))
@@ -684,8 +759,11 @@
     t))
 
 (defun block-conset-union (x y)
-  (declare (type block-conset x)
+  (declare (type block-conset x y)
            (optimize speed (safety 0)))
+  (unless (block-conset-data x)
+    (sset-union (block-conset-vars x) (block-conset-vars y))
+    (return-from block-conset-union x))
   (canonicalize-block-conset y)
   (do-block-conset-vars (var y-info y)
     (let* ((class          (var-info-eqv-class y-info))
@@ -710,17 +788,24 @@
            (type lambda-var var)
            (type lvar lvar)
            (optimize speed (safety 0)))
-  (and (sset-member var (block-conset-vars bconset))
-       (let* ((info (gethash var (block-conset-data bconset)))
-              (con  (find-constraint 'eql var lvar nil)))
-         (declare (type var-info info))
-         (and con
-              (sset-member con (var-info-eql-lvars info))))))
+  (if (not (block-conset-data bconset))
+      (let ((con  (find-constraint 'eql var lvar nil)))
+        (and con
+             (sset-member con (block-conset-vars bconset))))
+      (and (sset-member var (block-conset-vars bconset))
+           (let* ((info (gethash var (block-conset-data bconset)))
+                  (con  (find-constraint 'eql var lvar nil)))
+             (declare (type var-info info))
+             (and con
+                  (sset-member con (var-info-eql-lvars info)))))))
 
 (defun block-conset-forget-var (bconset var)
   (declare (type block-conset bconset)
            (type lambda-var var)
            (optimize speed (safety 0)))
+  (unless (block-conset-data bconset)
+    (sset-difference (block-conset-vars bconset) (lambda-var-constraints var))
+    (return-from block-conset-forget-var bconset))
   (when (sset-delete var (block-conset-vars bconset))
     (let ((info (gethash var (block-conset-data bconset))))
       (flet ((clear (sset)
@@ -744,21 +829,25 @@
   (declare (type lambda-var var)
            (type block-conset bconset)
            (optimize speed (safety 0)))
-  (unless (sset-member var (block-conset-vars bconset))
-    (return-from %call-with-var-block-conset-constraints nil))
-  (let* ((function (if (functionp function)
-                       function
-                       (fdefinition function)))
-         (info     (gethash var (block-conset-data bconset)))
-         (class    (var-info-eqv-class info)))
-    (do-sset-elements (con (eqv-class-conset class))
+  (let ((function (if (functionp function)
+                      function
+                      (fdefinition function))))
+    (unless (block-conset-data bconset)
+      (do-sset-intersection (con (lambda-var-constraints var) (block-conset-vars bconset))
         (funcall function con))
-    (do-sset-elements (var2 (eqv-class-class class))
-      (unless (eql var var2)
-        (funcall function var2)))
-    (when (var-info-private info)
-      (do-sset-elements (con (var-info-private info))
-        (funcall function con)))))
+      (return-from %call-with-var-block-conset-constraints))
+    (unless (sset-member var (block-conset-vars bconset))
+      (return-from %call-with-var-block-conset-constraints nil))
+    (let* ((info     (gethash var (block-conset-data bconset)))
+           (class    (var-info-eqv-class info)))
+      (do-sset-elements (con (eqv-class-conset class))
+        (funcall function con))
+      (do-sset-elements (var2 (eqv-class-class class))
+        (unless (eql var var2)
+          (funcall function var2)))
+      (when (var-info-private info)
+        (do-sset-elements (con (var-info-private info))
+          (funcall function con))))))
 
 (defmacro do-var-block-conset-constraints ((constraint var bconset &optional result) &body body)
   `(block nil
@@ -773,6 +862,14 @@
            (type lambda-var x)
            (type constraint-y y)
            (optimize speed (safety 0)))
+  (unless (block-conset-data bconset)
+    (let ((sset (block-conset-vars bconset)))
+      (return-from block-adjoin-constraint
+        (and (sset-adjoin (find-or-create-constraint kind x y not-p)
+                          sset)
+             (dolist (var (eql-var-list x bconset) t)
+               (sset-adjoin (find-or-create-constraint kind var y not-p)
+                            sset))))     ))
   (let* ((info (ensure-block-conset-info bconset x))
          (class (var-info-eqv-class info)))
     (cond ((and (eql kind 'eql)
@@ -790,6 +887,7 @@
           (t
            (sset-adjoin (find-or-create-constraint kind *dummy-var* y not-p)
                         (eqv-class-conset class))))))
+)
 
 (defun find-constraint (kind x y not-p)
   (declare (type lambda-var x) (type constraint-y y) (type boolean not-p))
@@ -828,8 +926,8 @@
   (declare (type lambda-var x)
            (type constraint con)
            (type constraint-y y))
-  #+nil
-  (conset-adjoin con (lambda-var-constraints x))
+  (unless *heavy-consets*
+    (conset-adjoin con (lambda-var-constraints x)))
   (etypecase y
     (ctype
        (let ((index (or (lambda-var-ctype-constraints x)
@@ -855,7 +953,6 @@
         (vector-push-extend new *constraint-universe*
                             (1+ (length *constraint-universe*)))
         (register-constraint x new y)
-        #+nil
         (when (lambda-var-p y)
           (register-constraint y new x))
         new)))
