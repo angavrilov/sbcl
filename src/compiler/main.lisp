@@ -474,8 +474,10 @@ Examples:
                                               ;make this 0.
                                            :fill-pointer 0 :adjustable t))
         (loop-count 1)
-        (*delayed-ir1-transforms* nil))
-    (declare (special *constraint-universe* *delayed-ir1-transforms*))
+        (*delayed-ir1-transforms* nil)
+        (*dummy-var* (make-lambda-var :%source-name '.anonymous.
+                                      :constraints (make-sset))))
+    (declare (special *constraint-universe* *delayed-ir1-transforms* *dummy-var*))
     (loop
       (ir1-optimize-until-done component)
       (when (or (component-new-functionals component)
