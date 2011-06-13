@@ -750,16 +750,12 @@
                        function
                        (fdefinition function)))
          (info     (gethash var (block-conset-data bconset)))
-         (class    (var-info-eqv-class info))
-         (dummy-var *dummy-var*))
+         (class    (var-info-eqv-class info)))
     (do-sset-elements (con (eqv-class-conset class))
         (funcall function con))
     (do-sset-elements (var2 (eqv-class-class class))
       (unless (eql var var2)
-        (funcall function (find-or-create-constraint 'eql dummy-var var2 nil))))
-    (when (var-info-eql-lvars info)
-      (do-sset-elements (con (var-info-eql-lvars info))
-        (funcall function con)))
+        (funcall function var2)))
     (when (var-info-private info)
       (do-sset-elements (con (var-info-private info))
         (funcall function con)))))
@@ -1150,52 +1146,57 @@
       ;; probably run faster when the smaller set comes first, so
       ;; don't change the order here.
       (do-var-block-conset-constraints (con var in)
-        (let* ((x (constraint-x con))
-               (y (constraint-y con))
-               (not-p (constraint-not-p con))
-               (other (if (or (eq x leaf) (eq x *dummy-var*))
-                          y x))
-               (kind (constraint-kind con)))
+        (multiple-value-bind (kind other not-p)
+            (etypecase con
+              (constraint
+                 (let ((x (constraint-x con))
+                       (y (constraint-y con)))
+                   (values (constraint-kind con)
+                           (if (or (eq x leaf) (eq x *dummy-var*))
+                               y x)
+                           (constraint-not-p con))))
+              (lambda-var
+                 (values 'eql con nil)))
           (case kind
             (typep
-             (if not-p
-                 (if (member-type-p other)
-                     (mapc-member-type-members #'note-not other)
-                     (setq not-res (type-union not-res other)))
-                 (setq res (type-approx-intersection2 res other))))
+               (if not-p
+                   (if (member-type-p other)
+                       (mapc-member-type-members #'note-not other)
+                       (setq not-res (type-union not-res other)))
+                   (setq res (type-approx-intersection2 res other))))
             (eql
-             (unless (lvar-p other)
-               (let ((other-type (leaf-type other)))
-                 (if not-p
-                     (when (and (constant-p other)
-                                (member-type-p other-type))
-                       (note-not (constant-value other)))
-                     (let ((leaf-type (leaf-type leaf)))
-                       (cond
-                         ((or (constant-p other)
-                              (and (leaf-refs other) ; protect from
+               (unless (lvar-p other)
+                 (let ((other-type (leaf-type other)))
+                   (if not-p
+                       (when (and (constant-p other)
+                                  (member-type-p other-type))
+                         (note-not (constant-value other)))
+                       (let ((leaf-type (leaf-type leaf)))
+                         (cond
+                           ((or (constant-p other)
+                                (and (leaf-refs other) ; protect from
                                         ; deleted vars
-                                   (csubtypep other-type leaf-type)
-                                   (not (type= other-type leaf-type))
-                                   ;; Don't change to a LEAF not visible here.
-                                   (leaf-visible-from-node-p other ref)))
-                          (change-ref-leaf ref other)
-                          (when (constant-p other) (return)))
-                         (t
-                          (setq res (type-approx-intersection2
-                                     res other-type)))))))))
+                                     (csubtypep other-type leaf-type)
+                                     (not (type= other-type leaf-type))
+                                     ;; Don't change to a LEAF not visible here.
+                                     (leaf-visible-from-node-p other ref)))
+                            (change-ref-leaf ref other)
+                            (when (constant-p other) (return)))
+                           (t
+                            (setq res (type-approx-intersection2
+                                       res other-type)))))))))
             ((< >)
-             (cond
-               ((and (integer-type-p res) (integer-type-p y))
-                (let ((greater (eq kind '>)))
-                  (let ((greater (if not-p (not greater) greater)))
-                    (setq res
-                          (constrain-integer-type res y greater not-p)))))
-               ((and (float-type-p res) (float-type-p y))
-                (let ((greater (eq kind '>)))
-                  (let ((greater (if not-p (not greater) greater)))
-                    (setq res
-                          (constrain-float-type res y greater not-p)))))))))))
+               (cond
+                 ((and (integer-type-p res) (integer-type-p other))
+                  (let ((greater (eq kind '>)))
+                    (let ((greater (if not-p (not greater) greater)))
+                      (setq res
+                            (constrain-integer-type res other greater not-p)))))
+                 ((and (float-type-p res) (float-type-p other))
+                  (let ((greater (eq kind '>)))
+                    (let ((greater (if not-p (not greater) greater)))
+                      (setq res
+                            (constrain-float-type res other greater not-p)))))))))))
     (cond ((and (if-p (node-dest ref))
                 (or (xset-member-p nil not-set)
                     (csubtypep (specifier-type 'null) not-res)))
