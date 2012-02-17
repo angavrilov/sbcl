@@ -80,7 +80,6 @@ find . \( \
         -name .git -o \
         -name .svn \) -type d -prune -o \
        \( \
-        -type l -o \
         -name '*~' -o \
         -name '#*#' -o \
         -name '.#*' -o \
